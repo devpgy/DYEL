@@ -105,6 +105,10 @@
   .exhead{display:flex; align-items:flex-start; justify-content:space-between; gap:10px}
   .exname{font-weight:800; font-size:17px; letter-spacing:-.01em}
   .varbtn{font-size:12px; color:var(--cardio); font-weight:700; margin-top:3px; display:inline-flex; align-items:center; gap:4px}
+  .movegrp{display:flex; flex-direction:column; gap:3px; flex:0 0 auto}
+  .moveb{width:30px; height:25px; border-radius:7px; background:var(--bg2); border:1px solid var(--line2); color:var(--muted); font-size:11px; display:flex; align-items:center; justify-content:center; line-height:1}
+  .moveb:active{filter:brightness(1.4)}
+  .moveb.off{opacity:.25; pointer-events:none}
 
   .card.cardio{border-color:var(--cardio-dim)}
   .card.cardio .eyebrow{color:var(--cardio)}
@@ -257,6 +261,7 @@ function e1rm(w,r,rpe){ w=+w; r=+r; if(!w||!r||r<=0) return 0; let eff=r; const 
 function repsForTarget(t,w){ w=+w; if(w<=0||!t) return 0; if(w>=t) return 1; return Math.max(1,Math.ceil(30*(t/w-1))); }
 function weightForTarget(t,r){ r=+r; if(r<=0||!t) return 0; return t/(1+r/30); }
 function isWorking(st){ return +st.reps>0; }   // a logged working set (weight optional for bodyweight)
+function arrMove(arr,id,dir){ const i=arr.findIndex(x=>x.id===id); if(i<0) return; const j=i+dir; if(j<0||j>=arr.length) return; const [x]=arr.splice(i,1); arr.splice(j,0,x); }
 
 function historyEntries(exId,vId){
   const out=[];
@@ -450,6 +455,7 @@ function screenLogger(){
 }
 function entryCard(s,en){
   const ex=exById(en.exerciseId);
+  const idx=s.strength.findIndex(e=>e.id===en.id), lastIdx=s.strength.length-1;
   const last=lastEntry(en.exerciseId,en.variantId,s.id,s.date);
   const lastTop=last?topSet(last.entry):null, baseE=lastTop?lastTop.e:0;
   let lt;
@@ -479,6 +485,7 @@ function entryCard(s,en){
   return `<div class="card" data-entry="${en.id}">
     <div class="exhead"><div class="grow"><div class="exname ellip">${esc(ex?ex.name:"Unknown")}</div>
       <button class="varbtn" data-var="${en.id}">▾ ${esc(varLabel(ex,en.variantId)||"Standard")}</button></div>
+      <div class="movegrp"><button class="moveb ${idx===0?'off':''}" data-eup="${en.id}" aria-label="Move up">▲</button><button class="moveb ${idx===lastIdx?'off':''}" data-edn="${en.id}" aria-label="Move down">▼</button></div>
       <button class="del" data-delentry="${en.id}" style="color:var(--faint);font-size:22px">×</button></div>
     ${lt}${planner}
     <div class="sets"><div class="set-h"><div></div><div>Weight</div><div>Reps</div><div>RPE</div><div style="text-align:right">1RM</div><div></div></div>${setRows}</div>
@@ -497,6 +504,8 @@ function suggestText(en,baseE){
 function bindEntryCards(s){
   elV.querySelectorAll("[data-var]").forEach(b=>b.onclick=()=>chooseVariant(s,s.strength.find(e=>e.id===b.dataset.var)));
   elV.querySelectorAll("[data-delentry]").forEach(b=>b.onclick=()=>{ s.strength=s.strength.filter(e=>e.id!==b.dataset.delentry); persist(); screenLogger(); });
+  elV.querySelectorAll("[data-eup]").forEach(b=>b.onclick=()=>{ arrMove(s.strength,b.dataset.eup,-1); persist(); screenLogger(); });
+  elV.querySelectorAll("[data-edn]").forEach(b=>b.onclick=()=>{ arrMove(s.strength,b.dataset.edn,1); persist(); screenLogger(); });
   elV.querySelectorAll("[data-plan-mode]").forEach(seg=>{ const en=s.strength.find(e=>e.id===seg.dataset.planMode);
     seg.querySelectorAll("button").forEach(btn=>btn.onclick=()=>{ en.plan.mode=btn.dataset.m; seg.querySelectorAll("button").forEach(x=>x.classList.remove("on")); btn.classList.add("on"); persist(); }); });
   elV.querySelectorAll("[data-plan-w]").forEach(inp=>{ const en=s.strength.find(e=>e.id===inp.dataset.planW); inp.oninput=()=>{en.plan.weight=inp.value;updateSuggest(s,en);}; inp.onchange=persist; });
@@ -596,10 +605,11 @@ function screenWorkoutEdit(){
   let html=`<input class="input" id="wName" value="${esc(w.name)}" style="font-weight:800;font-size:18px;margin-bottom:16px">
     <div class="eyebrow">Exercises & sets</div>`;
   if(!w.items.length) html+=`<p class="muted small" style="margin:4px 0 14px">Add exercises and set a target number of working sets each.</p>`;
-  else html+=w.items.map(it=>{ const ex=exById(it.exerciseId);
+  else html+=w.items.map((it,i)=>{ const ex=exById(it.exerciseId);
     return `<div class="card" data-item="${it.id}" style="padding:13px 14px">
       <div class="between"><div class="grow"><div style="font-weight:700" class="ellip">${esc(ex?ex.name:"?")}</div>
         <button class="varbtn" data-itemvar="${it.id}">▾ ${esc(varLabel(ex,it.variantId)||"Standard")}</button></div>
+        <div class="movegrp"><button class="moveb ${i===0?'off':''}" data-iup="${it.id}" aria-label="Move up">▲</button><button class="moveb ${i===w.items.length-1?'off':''}" data-idn="${it.id}" aria-label="Move down">▼</button></div>
         <button class="del" data-delitem="${it.id}" style="color:var(--faint);font-size:20px">×</button></div>
       <div class="between" style="margin-top:10px"><span class="muted small">Working sets</span>
         <div class="stepper"><button data-dec="${it.id}">–</button><span class="v num" data-sets="${it.id}">${it.sets||0}</span><button data-inc="${it.id}">+</button></div></div></div>`;
@@ -609,6 +619,8 @@ function screenWorkoutEdit(){
   bindText("wName",v=>{w.name=v;},true);
   document.getElementById("addItem").onclick=()=>pickExercise((exId,vId)=>{ w.items.push({id:uid(),exerciseId:exId,variantId:vId,sets:3}); persist(); screenWorkoutEdit(); });
   elV.querySelectorAll("[data-delitem]").forEach(b=>b.onclick=()=>{ w.items=w.items.filter(x=>x.id!==b.dataset.delitem); persist(); screenWorkoutEdit(); });
+  elV.querySelectorAll("[data-iup]").forEach(b=>b.onclick=()=>{ arrMove(w.items,b.dataset.iup,-1); persist(); screenWorkoutEdit(); });
+  elV.querySelectorAll("[data-idn]").forEach(b=>b.onclick=()=>{ arrMove(w.items,b.dataset.idn,1); persist(); screenWorkoutEdit(); });
   elV.querySelectorAll("[data-inc]").forEach(b=>b.onclick=()=>{ const it=w.items.find(x=>x.id===b.dataset.inc); it.sets=Math.min(20,(it.sets||0)+1); document.querySelector(`[data-sets="${it.id}"]`).textContent=it.sets; persist(); });
   elV.querySelectorAll("[data-dec]").forEach(b=>b.onclick=()=>{ const it=w.items.find(x=>x.id===b.dataset.dec); it.sets=Math.max(1,(it.sets||0)-1); document.querySelector(`[data-sets="${it.id}"]`).textContent=it.sets; persist(); });
   elV.querySelectorAll("[data-itemvar]").forEach(b=>b.onclick=()=>{

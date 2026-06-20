@@ -4,7 +4,7 @@
      with a cached fallback for offline launches.
    - Static assets (icons, manifest): cache-first.
    Bump CACHE on each release to retire old caches. */
-const CACHE = "dyel-v2";
+const CACHE = "dyel-v3";
 const ASSETS = [
   "./",
   "./index.html",
