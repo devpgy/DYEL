@@ -121,11 +121,19 @@
   .useg button.on{background:var(--strength);color:#1a1407}
   .calc{background:linear-gradient(180deg,rgba(58,208,216,.07),transparent);border:1px solid var(--cardio-dim);border-radius:11px;padding:12px;margin-top:6px}
   .set-r.lvl .e1{color:var(--faint);font-weight:500}
+  .set-h.norpe,.set-r.norpe{grid-template-columns:24px 1fr 1fr 50px 26px}
+  .histgrid{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+  .histgrid th,.histgrid td{padding:7px 8px;text-align:center;border-bottom:1px solid var(--line);white-space:nowrap}
+  .histgrid th{font-size:10px;letter-spacing:.05em;text-transform:uppercase;color:var(--faint);font-weight:700}
+  .histgrid td .hw{font-weight:800;font-size:14px}
+  .histgrid td .hd{font-size:9px;color:var(--faint);margin-top:1px}
+  .histgrid td.rh{font-weight:800;color:var(--muted);text-align:left}
+  .histwrap{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:0 -4px}
   .chips{display:flex;gap:7px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding:1px 0 12px;margin:0 -2px}
   .chips::-webkit-scrollbar{display:none}
   .chip{flex:0 0 auto;padding:7px 13px;border-radius:999px;font-size:13px;font-weight:700;background:var(--surface);border:1px solid var(--line2);color:var(--muted);white-space:nowrap}
   .chip.on{background:var(--strength);color:#1a1407;border-color:var(--strength)}
-  .ov.top{align-items:flex-start}
+  .ov.top{align-items:flex-start;padding-top:env(safe-area-inset-top,0px)}
   .sheet.top{border-radius:0 0 20px 20px; max-height:84vh}
   .sheet.top #pickSearch{position:sticky;top:0;z-index:3;background:var(--bg2)}
   .tfab{position:fixed;left:18px;bottom:calc(86px + var(--safe-b));z-index:35;height:46px;padding:0 15px;border-radius:14px;background:var(--surface2);border:1px solid var(--line2);color:var(--text);font-weight:800;display:flex;align-items:center;gap:7px;box-shadow:0 6px 20px rgba(0,0,0,.4)}
@@ -135,7 +143,7 @@
   .presetgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
   .presetgrid button{padding:14px 0;border-radius:11px;background:var(--surface);border:1px solid var(--line2);font-weight:800;font-variant-numeric:tabular-nums}
   .presetgrid button:active{border-color:var(--cardio)}
-  .share-ov{position:fixed;inset:0;z-index:70;background:rgba(0,0,0,.86);display:flex;flex-direction:column;align-items:center;overflow:auto;padding:20px 14px calc(20px + var(--safe-b))}
+  .share-ov{position:fixed;inset:0;z-index:70;background:rgba(0,0,0,.86);display:flex;flex-direction:column;align-items:center;justify-content:center;overflow:auto;padding:calc(env(safe-area-inset-top,0px) + 40px) 14px calc(40px + var(--safe-b))}
   .sharecard{width:100%;max-width:430px;background:linear-gradient(170deg,#1b1e25,#0d0e11);border:1px solid var(--line2);border-radius:20px;padding:22px}
 
   .card.cardio{border-color:var(--cardio-dim)}
@@ -212,13 +220,27 @@ function load(){ try{ const raw=HAS_LS?localStorage.getItem(KEY):memoryStore; re
 function persist(){ try{ const raw=JSON.stringify(DB); if(HAS_LS) localStorage.setItem(KEY,raw); else memoryStore=raw; }catch(e){} }
 
 /* ============================ CONSTANTS ============================ */
-const MUSCLE_ORDER=["Quads","Hamstrings","Glutes","Calves","Adductors","Hip Flexors","Chest","Back","Traps","Front Delts","Side Delts","Rear Delts","Biceps","Triceps","Forearms"];
-const MT={Quads:[8,14],Hamstrings:[6,10],Glutes:[6,10],Calves:[6,10],Adductors:[4,8],"Hip Flexors":[3,6],Chest:[8,12],Back:[8,14],Traps:[6,10],"Front Delts":[3,8],"Side Delts":[6,12],"Rear Delts":[6,10],Biceps:[6,12],Triceps:[6,12],Forearms:[4,10]};
+const MUSCLE_ORDER=["Quads","Hamstrings","Glutes","Calves","Adductors","Hip Flexors","Abdominals","Chest","Back","Traps","Front Delts","Side Delts","Rear Delts","Biceps","Triceps","Forearms"];
+const MT={Quads:[8,14],Hamstrings:[6,10],Glutes:[6,10],Calves:[6,10],Adductors:[4,8],"Hip Flexors":[3,6],Abdominals:[6,12],Chest:[8,12],Back:[8,14],Traps:[6,10],"Front Delts":[3,8],"Side Delts":[6,12],"Rear Delts":[6,10],Biceps:[6,12],Triceps:[6,12],Forearms:[4,10]};
 
 /* ============================ STATE ============================ */
 let DB=load()||freshDB();
 function freshDB(){ return { settings:{wu:"kg",du:"km"}, muscles:[], exercises:[], cardioTypes:[], templates:[], sessions:[], seeded:false }; }
 if(!DB.seeded){ seedStarter(); DB.seeded=true; persist(); }
+migrate();
+function migrate(){
+  let changed=false;
+  // ensure every muscle group exists (adds Abdominals + any new ones), keep canonical order
+  const have=new Set((DB.muscles||[]).map(m=>m.name));
+  for(const n of MUSCLE_ORDER){ if(!have.has(n)){ DB.muscles.push({name:n,min:MT[n][0],max:MT[n][1]}); changed=true; } }
+  DB.muscles.sort((a,b)=>{ const ia=MUSCLE_ORDER.indexOf(a.name), ib=MUSCLE_ORDER.indexOf(b.name); return (ia<0?99:ia)-(ib<0?99:ib); });
+  // tag each exercise muscle as direct/indirect if missing: top contributor(s) = direct
+  for(const ex of DB.exercises||[]){ const tags=ex.muscles||[]; if(!tags.length) continue;
+    const mx=Math.max(...tags.map(t=>t.value));
+    for(const t of tags){ if(t.direct===undefined){ t.direct = (t.value>=1.0)||(t.value===mx); changed=true; } }
+  }
+  if(changed) persist();
+}
 
 function seedStarter(){
   DB.muscles=MUSCLE_ORDER.map(n=>({name:n,min:MT[n][0],max:MT[n][1]}));
@@ -333,6 +355,16 @@ function weeklyMuscleVolume(weekStart){
   }
   return tally;
 }
+function weeklyMuscleVolumeSplit(weekStart){
+  const end=addDays(weekStart,6), split={};
+  for(const s of DB.sessions){ if(s.date<weekStart||s.date>end) continue;
+    for(const en of s.strength){ const ex=exById(en.exerciseId); if(!ex) continue;
+      const ws=en.sets.filter(isWorking).length; if(!ws) continue;
+      for(const m of (ex.muscles||[])){ if(!split[m.muscle]) split[m.muscle]={direct:0,indirect:0}; const add=m.value*ws; if(m.direct!==false) split[m.muscle].direct+=add; else split[m.muscle].indirect+=add; }
+    }
+  }
+  return split;
+}
 function projectedMuscleVolume(tpl){
   const tally={};
   for(const w of tpl.workouts) for(const it of w.items){ const ex=exById(it.exerciseId); if(!ex) continue;
@@ -437,13 +469,19 @@ function addWorkoutFlow(){
   document.getElementById("optPrev").onclick=()=>{ if(!prev.length){toast("No previous workouts yet");return;} closeModal(); pickPrevious(prev); };
   document.getElementById("optEmpty").onclick=()=>{closeModal(); open("logger",{sessionId:createSession("Workout",[])});};
 }
+let tplPickOpen=null;
 function pickTemplateWorkout(){
   if(!DB.templates.length){ modalSheet("No plans yet",`<p class="muted">Build a plan first in the Plans tab.</p><button class="btn primary block" id="gp" style="margin-top:8px">Go to Plans</button>`); document.getElementById("gp").onclick=()=>{closeModal();go("plans");}; return; }
-  let body="";
-  for(const t of DB.templates){ if(!t.workouts.length) continue; body+=`<div class="divlabel">${esc(t.name)}</div>`;
-    body+=t.workouts.map(w=>`<button class="opt" data-tpl="${t.id}" data-w="${w.id}"><span class="grow"><div class="ot">${esc(w.name)}</div><div class="od">${w.items.length} exercises · ${w.items.reduce((a,i)=>a+(i.sets||0),0)} sets</div></span><span class="faint">›</span></button>`).join("");
-  }
+  tplPickOpen=null; renderTplPicker();
+}
+function renderTplPicker(){
+  const body=DB.templates.filter(t=>t.workouts.length).map(t=>{
+    const open=tplPickOpen===t.id;
+    const days=open? t.workouts.map(w=>`<button class="opt" data-tpl="${t.id}" data-w="${w.id}" style="padding-left:26px;border-left:2px solid var(--line2);margin-left:8px"><span class="grow"><div class="ot">${esc(w.name)}</div><div class="od">${w.items.length} exercises · ${w.items.reduce((a,i)=>a+(i.sets||0),0)} sets</div></span><span class="faint">›</span></button>`).join("") : "";
+    return `<button class="opt" data-tplhdr="${t.id}"><span class="oi">${open?"▾":"▸"}</span><span class="grow"><div class="ot">${esc(t.name)}</div><div class="od">${t.workouts.length} day${t.workouts.length>1?"s":""}</div></span></button>${days}`;
+  }).join("");
   modalSheet("Pick a workout", body||`<p class="muted">No workouts in your plans yet.</p>`);
+  elM.querySelectorAll("[data-tplhdr]").forEach(b=>b.onclick=()=>{ tplPickOpen = tplPickOpen===b.dataset.tplhdr ? null : b.dataset.tplhdr; renderTplPicker(); });
   elM.querySelectorAll("[data-tpl]").forEach(b=>b.onclick=()=>{
     const t=DB.templates.find(x=>x.id===b.dataset.tpl), w=t.workouts.find(x=>x.id===b.dataset.w);
     const entries=w.items.map(it=>newEntry(it.exerciseId,it.variantId,it.sets||1));
@@ -498,7 +536,7 @@ function screenLogger(){
   bindText("sessTitle",v=>{s.title=v;},true);
   document.getElementById("sessDate").onchange=e=>{ s.date=e.target.value||todayISO(); persist(); };
   bindText("sessNotes",v=>{s.notes=v;},true);
-  document.getElementById("addExBtn").onclick=()=>pickExercise((exId,vId)=>{ s.strength.push(newEntry(exId,vId,1,{collapsed:false})); persist(); screenLogger(); });
+  document.getElementById("addExBtn").onclick=()=>pickExercise((exId,vId)=>{ s.strength.forEach(e=>e.collapsed=true); s.strength.push(newEntry(exId,vId,1,{collapsed:false})); persist(); screenLogger(); });
   document.getElementById("addCardioBtn").onclick=()=>{ s.cardio.push({id:uid(),modality:DB.cardioTypes[0]||"Running",distance:"",timeSec:"",avgHr:""}); persist(); screenLogger(); };
   document.getElementById("doneBtn").onclick=()=>{ persist(); toast("Saved"); go("today"); };
   document.getElementById("shareBtn").onclick=()=>openShareCard(s);
@@ -509,6 +547,7 @@ function entryCard(s,en){
   const ex=exById(en.exerciseId);
   const idx=s.strength.findIndex(e=>e.id===en.id), lastIdx=s.strength.length-1;
   const u=entryUnit(en), lvl=u==="level", ul=unitLabel(u);
+  const noRpe = !!(ex && ex.trackRpe===false);
   const collapsed = en.collapsed!==false;
   const pi=progressInfo(s,en);
   const badge = pi&&pi.isPR?`<span class="pbadge pr">★ PR</span>`:(pi&&pi.isUp?`<span class="pbadge up">▲ up</span>`:"");
@@ -534,17 +573,17 @@ function entryCard(s,en){
       <div class="num" style="margin-top:5px">${esc(setsTxt||"—")}</div>
       ${llvl?"":`<div class="num small" style="margin-top:6px">Top <span class="lt-top">${round1(lastTop.weight)}${lu}×${lastTop.reps}</span> · est 1RM <span class="lt-top">${round1(lastTop.e)}${lu}</span></div>`}</div>`;
   } else lt=`<div class="lasttime faint">First time logging this — set your baseline.</div>`;
-  const setRows=en.sets.map((st,i)=>`<div class="set-r ${lvl?'lvl':''}" data-set="${en.id}:${st.id}">
+  const setRows=en.sets.map((st,i)=>`<div class="set-r ${lvl?'lvl':''} ${noRpe?'norpe':''}" data-set="${en.id}:${st.id}">
     <div class="sn">${i+1}</div>
     <input class="num" inputmode="decimal" data-f="weight" value="${esc(st.weight)}" placeholder="${lvl?'lvl':ul}">
     <input class="num" inputmode="numeric" data-f="reps" value="${esc(st.reps)}" placeholder="reps">
-    <select class="mini" data-f="rpe">${rpeOptions(st.rpe)}</select>
+    ${noRpe?"":`<select class="mini" data-f="rpe">${rpeOptions(st.rpe)}</select>`}
     ${lvl?`<div class="e1">—</div>`:`<div class="e1 num" data-e1="${en.id}:${st.id}">${(+st.weight&&+st.reps)?round1(e1rm(st.weight,st.reps,st.rpe)):'<span class="faint">—</span>'}</div>`}
     <button class="del" data-delset="${en.id}:${st.id}">×</button></div>`).join("");
   const calcBtn=`<button class="btn sm ghost block" data-calctoggle="${en.id}" style="margin-top:10px">${en.calc.open?"▾ Hide progress calculator":"▸ Calculate progress vs last week"}</button>`;
   const calcPanel = en.calc.open ? calcPanelHTML(en,last,lastTop) : "";
   return `<div class="${cardCls}" data-entry="${en.id}">${head}${useg}${lt}
-    <div class="sets"><div class="set-h"><div></div><div>${lvl?'Level':'Weight'}</div><div>Reps</div><div>RPE</div><div style="text-align:right">${lvl?'':'1RM'}</div><div></div></div>${setRows}</div>
+    <div class="sets"><div class="set-h ${noRpe?'norpe':''}"><div></div><div>${lvl?'Level':'Weight'}</div><div>Reps</div>${noRpe?"":"<div>RPE</div>"}<div style="text-align:right">${lvl?'':'1RM'}</div><div></div></div>${setRows}</div>
     <button class="btn sm ghost" data-addset="${en.id}" style="margin-top:2px">+ Set</button>
     ${calcBtn}${calcPanel}
     <details style="margin-top:12px" ${en.notes?"open":""}><summary class="small muted" style="cursor:pointer">Exercise note</summary>
@@ -553,6 +592,7 @@ function entryCard(s,en){
 function calcTarget(en,last){ if(!last) return 0; const u=entryUnit(en); const sc=topScore(last.entry); return u==="level"? sc : fromKg(sc,u); }
 function calcPanelHTML(en,last,lastTop){
   const u=entryUnit(en), ul=unitLabel(u), lvl=u==="level";
+  const ex=exById(en.exerciseId), noRpe=!!(ex&&ex.trackRpe===false);
   if(!last||!lastTop) return `<div class="calc"><span class="faint small">No previous session yet — log this week to start tracking progress.</span></div>`;
   const target=calcTarget(en,last), c=en.calc;
   return `<div class="calc">
@@ -560,14 +600,22 @@ function calcPanelHTML(en,last,lastTop){
     <div class="row" style="gap:8px">
       <div class="field grow"><label>${lvl?'Level':'Weight'} (${ul})</label><input class="input num" inputmode="decimal" data-cw="${en.id}" value="${esc(c.weight)}"></div>
       <div class="field grow"><label>Reps</label><input class="input num" inputmode="numeric" data-cr="${en.id}" value="${esc(c.reps)}"></div>
-      <div class="field" style="flex:0 0 78px"><label>RPE</label><select class="input" data-cp="${en.id}">${rpeOptions(c.rpe)}</select></div></div>
+      ${noRpe?"":`<div class="field" style="flex:0 0 78px"><label>RPE</label><select class="input" data-cp="${en.id}">${rpeOptions(c.rpe)}</select></div>`}</div>
     <div class="suggest" data-calcout="${en.id}">${calcText(en,target)}</div></div>`;
 }
 function calcText(en,target){
   const ul=unitLabel(entryUnit(en)); const c=en.calc;
+  const ex=exById(en.exerciseId), noRpe=!!(ex&&ex.trackRpe===false);
   const w=parseFloat(c.weight), r=parseInt(c.reps,10), p=parseFloat(c.rpe);
-  const hw=w>0, hr=r>0, hp=p>=5&&p<=10, n=(hw?1:0)+(hr?1:0)+(hp?1:0);
+  const hw=w>0, hr=r>0, hp=p>=5&&p<=10;
   if(!target) return `<span class="faint">No previous best to beat yet.</span>`;
+  if(noRpe){
+    if(!hw&&!hr) return `<span class="faint">Enter a weight or reps — I'll solve the other to beat <b>${round1(target)}${ul}</b>.</span>`;
+    if(hw&&hr){ const e=e1rm(w,r), d=e-target; const tag=d>=0?`<b style="color:var(--good)">beats by +${round1(d)}${ul} ✓</b>`:`<b style="color:var(--bad)">${round1(Math.abs(d))}${ul} short</b>`; return `That's a <b>${round1(e)}${ul}</b> 1RM — ${tag}`; }
+    if(hw){ const reps=repsForTarget(target,w); return `Do <b>${reps} rep${reps>1?'s':''}</b> @ <b>${round1(w)}${ul}</b> to beat last week — extra reps = bigger PR.`; }
+    const w2=weightForTarget(target,r); return `Use <b>${round1(w2)}${ul}</b> for <b>${r} reps</b> to match — a touch heavier to beat it.`;
+  }
+  const n=(hw?1:0)+(hr?1:0)+(hp?1:0);
   if(n<2) return `<span class="faint">Enter any two of weight, reps, RPE — I'll solve the third to beat <b>${round1(target)}${ul}</b>.</span>`;
   if(n===3){ const e=e1rm(w,r,p), d=e-target; const tag=d>=0?`<b style="color:var(--good)">beats by +${round1(d)}${ul} ✓</b>`:`<b style="color:var(--bad)">${round1(Math.abs(d))}${ul} short</b>`; return `That's a <b>${round1(e)}${ul}</b> 1RM — ${tag}`; }
   if(hw&&hp){ const eff=Math.round((30*(target/w-1))*1e6)/1e6; let reps=Math.ceil(eff-(10-p)-1e-9); if(reps<1) reps=1; return `Do <b>${reps} rep${reps>1?'s':''}</b> @ <b>${round1(w)}${ul}</b> RPE ${p} to beat last week — extra reps = bigger PR.`; }
@@ -577,7 +625,7 @@ function calcText(en,target){
 }
 function bindEntryCards(s){
   const rerender=()=>{ persist(); screenLogger(); };
-  elV.querySelectorAll("[data-toggle]").forEach(el=>el.onclick=()=>{ const en=s.strength.find(e=>e.id===el.dataset.toggle); en.collapsed = en.collapsed===false; rerender(); });
+  elV.querySelectorAll("[data-toggle]").forEach(el=>el.onclick=()=>{ const en=s.strength.find(e=>e.id===el.dataset.toggle); const opening=en.collapsed!==false; if(opening){ s.strength.forEach(e=>{ e.collapsed=(e.id!==en.id); }); } else en.collapsed=true; rerender(); });
   elV.querySelectorAll("[data-var]").forEach(b=>b.onclick=ev=>{ ev.stopPropagation(); chooseVariant(s,s.strength.find(e=>e.id===b.dataset.var)); });
   elV.querySelectorAll("[data-delentry]").forEach(b=>b.onclick=()=>{ s.strength=s.strength.filter(e=>e.id!==b.dataset.delentry); rerender(); });
   elV.querySelectorAll("[data-eup]").forEach(b=>b.onclick=()=>{ arrMove(s.strength,b.dataset.eup,-1); rerender(); });
@@ -747,10 +795,13 @@ function screenExerciseDetail(){
   if(!ex.muscles) ex.muscles=[];
   header("","",{back:"Lifts",onBack:()=>go("exercises"),action:{label:"\uD83D\uDDD1",cls:"icon-btn",fn:()=>confirmDelete("Delete exercise?","“"+ex.name+"” will be removed.",()=>{DB.exercises=DB.exercises.filter(x=>x.id!==ex.id);persist();go("exercises");})}});
   const totalSets=DB.sessions.reduce((a,s)=>a+s.strength.filter(e=>e.exerciseId===ex.id).reduce((b,e)=>b+e.sets.filter(isWorking).length,0),0);
+  const trackRpe=ex.trackRpe!==false;
   let html=`<input class="input" id="exName" value="${esc(ex.name)}" style="font-weight:800;font-size:18px;margin-bottom:8px">
     <p class="muted small" style="margin:0 0 16px">${totalSets} sets logged all-time.</p>
+    <div class="card" style="padding:13px 14px"><div class="between"><div style="min-width:0"><div style="font-weight:700">Track RPE</div><div class="faint tiny" style="margin-top:2px">Off hides the RPE field when logging — assumes steady intensity.</div></div>
+      <button class="chip" id="rpeToggle" style="flex:0 0 auto;${trackRpe?'background:var(--strength);color:#1a1407;border-color:var(--strength)':'background:var(--bg2);color:var(--muted)'}">${trackRpe?'On':'Off'}</button></div></div>
     <div class="card"><div class="eyebrow">Muscles worked</div>
-      <p class="faint tiny" style="margin:-4px 0 12px">Each set adds this value to the muscle's weekly volume. A row counts 1.0 to its prime mover, fractions to assistors.</p>
+      <p class="faint tiny" style="margin:-4px 0 12px">Each set adds its value to weekly volume. Mark each as <b style="color:var(--good)">direct</b> (prime mover) or indirect (assistor) — the dashboard splits them.</p>
       <div id="muscleList">${ex.muscles.map(m=>muscleTagRow(ex,m)).join("")||'<p class="faint small">No muscles tagged yet.</p>'}</div>
       <button class="btn ghost block sm" id="addMuscle" style="margin-top:10px">+ Tag a muscle</button></div>
     <div class="card"><div class="eyebrow">Variants</div>
@@ -758,7 +809,7 @@ function screenExerciseDetail(){
   html+=ex.variants.map(v=>{ const n=historyEntries(ex.id,v.id).reduce((a,h)=>a+h.entry.sets.filter(isWorking).length,0);
     return `<div class="listitem"><div class="grow"><input class="input" data-vlabel="${v.id}" value="${esc(v.label)}" style="border:none;background:transparent;padding:0;font-weight:600"></div>
       <div class="muted small num" style="white-space:nowrap">${n} sets</div>
-      <button class="btn sm ghost" data-vchart="${v.id}">Stats</button>
+      <button class="btn sm ghost" data-vchart="${v.id}">History</button>
       ${ex.variants.length>1?`<button class="del" data-delvar="${v.id}" style="color:var(--faint);font-size:20px">×</button>`:""}</div>`;
   }).join("");
   html+=`<button class="btn ghost block sm" id="addVar" style="margin-top:10px">+ Add variant</button></div>`;
@@ -769,8 +820,9 @@ function screenExerciseDetail(){
     if(!avail.length){toast("All muscles tagged");return;}
     const body=avail.map(m=>`<button class="opt" data-am="${esc(m)}"><span class="grow"><div class="ot">${esc(m)}</div></span></button>`).join("");
     modalSheet("Tag a muscle",body);
-    elM.querySelectorAll("[data-am]").forEach(b=>b.onclick=()=>{ ex.muscles.push({muscle:b.dataset.am,value:1.0}); persist(); closeModal(); screenExerciseDetail(); });
+    elM.querySelectorAll("[data-am]").forEach(b=>b.onclick=()=>{ ex.muscles.push({muscle:b.dataset.am,value:1.0,direct:true}); persist(); closeModal(); screenExerciseDetail(); });
   };
+  document.getElementById("rpeToggle").onclick=()=>{ ex.trackRpe=(ex.trackRpe===false); persist(); screenExerciseDetail(); };
   bindMuscleRows(ex);
   elV.querySelectorAll("[data-vlabel]").forEach(inp=>{ const v=ex.variants.find(x=>x.id===inp.dataset.vlabel); inp.oninput=()=>{v.label=inp.value;}; inp.onchange=persist; });
   elV.querySelectorAll("[data-vchart]").forEach(b=>b.onclick=()=>open("analytics",{exId:ex.id,vId:b.dataset.vchart}));
@@ -778,13 +830,16 @@ function screenExerciseDetail(){
   document.getElementById("addVar").onclick=()=>promptText("New variant","e.g. Blue machine, Home gym","",l=>{if(!l)return;ex.variants.push({id:uid(),label:l});persist();screenExerciseDetail();});
 }
 function muscleTagRow(ex,m){
-  return `<div class="listitem" data-mrow="${esc(m.muscle)}" style="padding:11px 0">
-    <div class="grow" style="font-weight:600">${esc(m.muscle)}</div>
-    <input class="input num" data-mval="${esc(m.muscle)}" inputmode="decimal" value="${m.value}" style="width:74px;text-align:center;padding:9px 4px">
+  const dir=m.direct!==false;
+  return `<div class="listitem" data-mrow="${esc(m.muscle)}" style="padding:11px 0;gap:8px">
+    <div class="grow ellip" style="font-weight:600;min-width:0">${esc(m.muscle)}</div>
+    <button class="chip" data-mdir="${esc(m.muscle)}" style="padding:5px 10px;font-size:11px;${dir?'background:var(--good-dim);color:var(--good);border-color:var(--good-dim)':'background:var(--bg2);color:var(--muted)'}">${dir?'Direct':'Indirect'}</button>
+    <input class="input num" data-mval="${esc(m.muscle)}" inputmode="decimal" value="${m.value}" style="width:58px;text-align:center;padding:9px 4px">
     <button class="del" data-delm="${esc(m.muscle)}" style="color:var(--faint);font-size:20px">×</button></div>`;
 }
 function bindMuscleRows(ex){
   elV.querySelectorAll("[data-mval]").forEach(inp=>{ const m=ex.muscles.find(x=>x.muscle===inp.dataset.mval); inp.oninput=()=>{ const v=parseFloat(inp.value); m.value=isNaN(v)?0:v; }; inp.onchange=persist; });
+  elV.querySelectorAll("[data-mdir]").forEach(b=>b.onclick=()=>{ const m=ex.muscles.find(x=>x.muscle===b.dataset.mdir); m.direct=(m.direct===false); persist(); screenExerciseDetail(); });
   elV.querySelectorAll("[data-delm]").forEach(b=>b.onclick=()=>{ ex.muscles=ex.muscles.filter(x=>x.muscle!==b.dataset.delm); persist(); screenExerciseDetail(); });
 }
 
@@ -819,13 +874,30 @@ function volumeBars(tally){
   }).join("");
 }
 function statsMuscles(ws){
-  const tally=weeklyMuscleVolume(ws);
-  const total=round1(Object.values(tally).reduce((a,b)=>a+b,0));
-  let html=`<div class="card"><div class="between"><div><div class="mono" style="font-size:28px;font-weight:800;color:var(--strength)">${total}</div><div class="faint tiny">TOTAL WORKING SETS THIS WEEK</div></div></div></div>`;
+  const split=weeklyMuscleVolumeSplit(ws);
+  let td=0,ti=0; for(const k in split){ td+=split[k].direct; ti+=split[k].indirect; }
+  const total=round1(td+ti);
+  let html=`<div class="card"><div class="between" style="align-items:flex-end">
+    <div><div class="mono" style="font-size:28px;font-weight:800;color:var(--strength)">${total}</div><div class="faint tiny">TOTAL WEIGHTED SETS THIS WEEK</div></div>
+    <div class="num small" style="text-align:right;color:var(--muted)"><div><b style="color:var(--good)">${round1(td)}</b> direct</div><div style="opacity:.7">${round1(ti)} indirect</div></div></div></div>`;
   html+=`<div class="card">`;
-  html+=DB.muscles.map(mt=>barFor(mt,round1(tally[mt.name]||0),true)).join("");
+  html+=DB.muscles.map(mt=>barForSplit(mt,split[mt.name]||{direct:0,indirect:0},true)).join("");
   html+=`</div>`;
   return html;
+}
+function barForSplit(mt,vol,tappable){
+  const min=mt.min,max=mt.max; const dir=vol.direct||0, ind=vol.indirect||0, tot=dir+ind;
+  const scaleMax=Math.max(max*1.2,tot*1.1,1);
+  const dPct=Math.min(100,dir/scaleMax*100), iPct=Math.min(100-dPct,ind/scaleMax*100);
+  const minPct=Math.min(100,min/scaleMax*100), maxPct=Math.min(100,max/scaleMax*100);
+  const color=tot<min?"var(--strength)":(tot<=max?"var(--good)":"var(--over)");
+  const status=tot<min?`${round1(min-tot)} to go`:(tot<=max?"in range":"over");
+  return `<div class="volrow" ${tappable?`data-medit="${esc(mt.name)}"`:""} ${tappable?'style="cursor:pointer"':''}>
+    <div class="vol-top"><span class="vol-name">${esc(mt.name)}</span>
+      <span class="vol-val"><b class="num" style="color:${color}">${round1(tot)}</b> <span class="faint">/ ${min}–${max}</span> · ${status}</span></div>
+    <div class="track"><div class="fill" style="position:absolute;left:0;top:0;width:${dPct}%;background:${color}"></div><div class="fill" style="position:absolute;left:${dPct}%;top:0;width:${iPct}%;background:${color};opacity:.38"></div>
+      <div class="zone" style="left:${minPct}%"></div><div class="zone" style="left:${maxPct}%"></div></div>
+    <div class="faint tiny num" style="margin-top:4px">${round1(dir)} direct · ${round1(ind)} indirect</div></div>`;
 }
 function barFor(mt,done,tappable){
   const min=mt.min,max=mt.max;
@@ -890,23 +962,38 @@ function screenAnalytics(){
   const v=ex.variants.find(x=>x.id===vId)||ex.variants[0];
   header("","",{back:ex.name,onBack:()=>open("exerciseDetail",{id:ex.id})});
   const hist=historyEntries(ex.id,vId), wu=DB.settings.wu; let weighted=[], levels=[];
-  hist.forEach(h=>{ const u=entryUnit(h.entry); h.entry.sets.forEach(st=>{ if(!(+st.weight&&+st.reps)) return; if(u==="level"){ levels.push({w:+st.weight,r:+st.reps,e:e1rm(st.weight,st.reps,st.rpe),date:h.date}); } else { const w=convertW(+st.weight,u,wu); weighted.push({w,r:+st.reps,e:e1rm(w,st.reps,st.rpe),date:h.date}); } }); });
+  hist.forEach(h=>{ const u=entryUnit(h.entry); h.entry.sets.forEach(st=>{ if(!(+st.weight&&+st.reps)) return; const p=+st.rpe, rpe=(p>=5&&p<=10)?p:null; if(u==="level"){ levels.push({w:+st.weight,r:+st.reps,e:e1rm(st.weight,st.reps,st.rpe),date:h.date,rpe}); } else { const w=convertW(+st.weight,u,wu); weighted.push({w,r:+st.reps,e:e1rm(w,st.reps,st.rpe),date:h.date,rpe}); } }); });
   const allSets = weighted.length? weighted : levels; const unitTxt = weighted.length? wu : "lvl";
   let html=`<div style="font-weight:800;font-size:20px">${esc(ex.name)}</div><div class="muted" style="margin-bottom:16px">${esc(v.label)}</div>`;
-  if(!allSets.length){ html+=`<div class="empty"><div class="big">\uD83D\uDCC8</div><h3>No data yet</h3><p class="muted small">Log sets of this variant to see your curves.</p></div>`; elV.innerHTML=html; setFab(null); return; }
+  if(!allSets.length){ html+=`<div class="empty"><div class="big">\uD83D\uDCC8</div><h3>No data yet</h3><p class="muted small">Log sets of this variant to see your history.</p></div>`; elV.innerHTML=html; setFab(null); return; }
   const bestE=allSets.reduce((m,s)=>s.e>m.e?s:m,allSets[0]);
-  const byRep={}; allSets.forEach(s=>{ if(!byRep[s.r]||s.w>byRep[s.r].w) byRep[s.r]={w:s.w,e:s.e,date:s.date}; });
   const byDate={}; allSets.forEach(s=>{ if(!byDate[s.date]||s.e>byDate[s.date]) byDate[s.date]=s.e; });
   const trend=Object.keys(byDate).sort().map(d=>({date:d,e:byDate[d]}));
   html+=`<div class="card"><div class="eyebrow">All-time best${levels.length&&!weighted.length?" (level)":" (RPE-adjusted)"}</div>
     <div class="mono" style="font-size:30px;font-weight:800;color:var(--strength)">${round1(bestE.e)}<span style="font-size:15px;color:var(--muted)">${unitTxt}</span></div>
-    <div class="faint tiny">EST 1RM · ${round1(bestE.w)}×${bestE.r} on ${fmtDate(bestE.date)}</div></div>`;
-  const reps=[]; for(let r=1;r<=20;r++) reps.push({r,w:byRep[r]?byRep[r].w:null});
-  html+=`<div class="card"><div class="eyebrow">Top ${weighted.length?'weight':'level'} by reps (1–20)</div>${barChart(reps,unitTxt)}</div>`;
-  if(trend.length>1) html+=`<div class="card"><div class="eyebrow">${weighted.length?'Est 1RM':'Level'} over time</div>${lineChart(trend)}</div>`;
-  html+=`<div class="card"><div class="eyebrow">Rep maxes</div>`;
-  html+=Object.keys(byRep).map(Number).sort((a,b)=>a-b).map(r=>`<div class="listitem" style="padding:11px 0"><div class="badge num">${r} rep${r>1?"s":""}</div><div class="grow num" style="font-weight:700;font-size:17px">${round1(byRep[r].w)}${unitTxt}</div><div class="num small" style="color:var(--strength);font-weight:700">${round1(byRep[r].e)}<span class="faint" style="font-weight:500"> 1RM</span></div><div class="faint tiny num" style="white-space:nowrap">${fmtDate(byRep[r].date)}</div></div>`).join("");
+    <div class="faint tiny">EST 1RM · ${round1(bestE.w)}×${bestE.r}${bestE.rpe?" @"+bestE.rpe:""} on ${fmtDate(bestE.date)}</div></div>`;
+  // Top 5 estimated 1RM with medals
+  const medals=["\uD83E\uDD47","\uD83E\uDD48","\uD83E\uDD49"];
+  const top5=allSets.slice().sort((a,b)=>b.e-a.e).slice(0,5);
+  html+=`<div class="card"><div class="eyebrow">Top 5 estimated 1RM</div>`;
+  html+=top5.map((s,i)=>`<div class="listitem" style="padding:10px 0">
+    <div style="width:28px;text-align:center;font-size:18px">${i<3?medals[i]:`<span class="faint num" style="font-weight:800">${i+1}</span>`}</div>
+    <div class="grow num" style="font-weight:700;font-size:16px">${round1(s.w)}${unitTxt}<span class="muted" style="font-weight:500">×${s.r}${s.rpe?` @${s.rpe}`:""}</span></div>
+    <div class="num small" style="color:var(--strength);font-weight:800">${round1(s.e)}<span class="faint" style="font-weight:500"> 1RM</span></div>
+    <div class="faint tiny num" style="white-space:nowrap">${fmtMD(s.date)}</div></div>`).join("");
   html+=`</div>`;
+  // Best weight by reps × RPE grid (only combos with data)
+  const grid={}, repSet=new Set(), rpeSet=new Set();
+  allSets.forEach(s=>{ const rk=s.rpe?String(s.rpe):"\u2014"; repSet.add(s.r); rpeSet.add(rk); const key=s.r+"|"+rk; if(!grid[key]||s.w>grid[key].w) grid[key]={w:s.w,date:s.date}; });
+  const repRows=[...repSet].sort((a,b)=>a-b);
+  const rpeCols=[...rpeSet].sort((a,b)=>{ if(a==="\u2014") return 1; if(b==="\u2014") return -1; return (+a)-(+b); });
+  let gridHtml=`<table class="histgrid"><thead><tr><th>reps</th>${rpeCols.map(c=>`<th>${c==="\u2014"?"no RPE":"@"+c}</th>`).join("")}</tr></thead><tbody>`;
+  repRows.forEach(r=>{ gridHtml+=`<tr><td class="rh">${r}</td>`+rpeCols.map(c=>{ const cell=grid[r+"|"+c]; return `<td>${cell?`<div class="hw">${round1(cell.w)}</div><div class="hd">${fmtMD(cell.date)}</div>`:'<span class="faint">–</span>'}</td>`; }).join("")+`</tr>`; });
+  gridHtml+=`</tbody></table>`;
+  html+=`<div class="card"><div class="eyebrow">Best ${weighted.length?'weight':'level'} by reps × RPE</div>
+    <p class="faint tiny" style="margin:-4px 0 10px">Heaviest ${weighted.length?unitTxt:"level"} ever hit for each rep & RPE combo, with the date.</p>
+    <div class="histwrap">${gridHtml}</div></div>`;
+  if(trend.length>1) html+=`<div class="card"><div class="eyebrow">${weighted.length?'Est 1RM':'Level'} over time</div>${lineChart(trend)}</div>`;
   elV.innerHTML=html; setFab(null);
 }
 function barChart(reps,unitTxt){
@@ -955,11 +1042,11 @@ function importData(e){ const f=e.target.files[0]; if(!f) return; const r=new Fi
 /* ============================ PICKERS / MODALS ============================ */
 function pickExercise(cb){
   const renderList=(q="")=>{ const f=DB.exercises.slice().filter(ex=>ex.name.toLowerCase().includes(q.toLowerCase())).sort((a,b)=>a.name.localeCompare(b.name));
-    return f.map(ex=>`<button class="opt" data-pick="${ex.id}"><span class="grow"><div class="ot">${esc(ex.name)}</div>${ex.variants.length>1?`<div class="od">${ex.variants.length} variants</div>`:""}</span><span class="faint">›</span></button>`).join("")||`<p class="muted small" style="text-align:center;padding:14px">No match — create it below.</p>`; };
+    return f.map(ex=>`<button class="opt" data-pick="${ex.id}"><span class="grow"><div class="ot">${esc(ex.name)}</div>${ex.variants.length>1?`<div class="od">${ex.variants.length} variants</div>`:""}</span><span class="faint">›</span></button>`).join("")||`<p class="muted small" style="text-align:center;padding:14px">No match — use “Create new exercise” above.</p>`; };
   elM.innerHTML=`<div class="ov top" id="ovEl"><div class="sheet top"><div class="grip"></div>
-    <input class="input" id="pickSearch" placeholder="Search exercise…" autocomplete="off" style="margin-bottom:12px">
-    <div id="pickList">${renderList()}</div>
-    <button class="btn ghost block" id="pickNew" style="margin-top:8px">+ Create new exercise</button></div></div>`;
+    <input class="input" id="pickSearch" placeholder="Search exercise…" autocomplete="off" style="margin-bottom:10px">
+    <button class="btn ghost block" id="pickNew" style="margin-bottom:10px">+ Create new exercise</button>
+    <div id="pickList">${renderList()}</div></div></div>`;
   const ov=document.getElementById("ovEl"); ov.onclick=e=>{ if(e.target===ov) closeModal(); };
   const search=document.getElementById("pickSearch");
   const bind=()=>elM.querySelectorAll("[data-pick]").forEach(b=>b.onclick=()=>{ const ex=exById(b.dataset.pick); if(ex.variants.length>1) chooseVariantForPick(ex,cb); else { closeModal(); cb(ex.id,ex.variants[0].id); } });
